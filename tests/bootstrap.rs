@@ -5,7 +5,7 @@
 //! diagnostics in the [`TypecheckReport`].
 
 use handl_language::Language;
-use handl_plugin_engine_typecheck::{CheckError, TypecheckReport, check_module};
+use hnl_engine_typecheck::{CheckError, TypecheckReport, check_module};
 use handl_plugin_ext_diag::Severity;
 
 /// The canonical language for the bootstrap checker — supplied by the caller

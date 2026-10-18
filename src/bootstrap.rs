@@ -20,9 +20,9 @@
 //! (ADR-0091) — no local variant types are defined here.
 
 use handl_language::{Ast, AstNode, AstRef, Language};
-use handl_plugin_engine_lex_pattern::lex;
-use handl_plugin_engine_parse::{ParserEngine, ParserRequest};
-use handl_plugin_engine_parse_pratt::PrattEngine;
+use hnl_engine_lex_pattern::lex;
+use hnl_engine_parse::{ParserEngine, ParserRequest};
+use hnl_engine_parse_pratt::PrattEngine;
 use handl_plugin_ext_diag::{Diagnostic, Severity, Span, split_statements};
 use serde_json::Value;
 

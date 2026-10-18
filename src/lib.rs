@@ -1,4 +1,4 @@
-//! # handl-plugin-engine-typecheck
+//! # hnl-engine-typecheck
 //!
 //! The **abstraction** crate for the typecheck operation (ADR-0054 §3).
 //!
@@ -10,7 +10,7 @@
 //! rules may call host functions).
 //! **No typecheck engine code lives here except the bootstrap checker** — the
 //! abstraction is the contract. The concrete engines are
-//! `handl-plugin-engine-typecheck-handl` (an interpreted `.hnl` model, the
+//! `hnl-engine-typecheck-handl` (an interpreted `.hnl` model, the
 //! engine the canonical kit registers under the name `"handl"`) and this
 //! crate's own Rust [`check_module`] bootstrap checker, which hosts fall back
 //! to. Engines are selected via `runtime.typecheck` in the kit data.
