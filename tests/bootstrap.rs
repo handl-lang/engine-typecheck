@@ -9,12 +9,12 @@ use hnl_engine_typecheck::{CheckError, TypecheckReport, check_module};
 use handl_plugin_ext_diag::Severity;
 
 /// The canonical language for the bootstrap checker — supplied by the caller
-/// (the dev-dep on `handl-kit-data-canonical` is allowed to close the
+/// (the dev-dep on `handl-kit-data-prelude` is allowed to close the
 /// runtime dependency cycle in test builds only).
 fn lang() -> &'static Language {
     static LANG: std::sync::OnceLock<Language> = std::sync::OnceLock::new();
     LANG.get_or_init(|| {
-        handl_kit_data_canonical::language_from_yaml().expect("canonical language assembles")
+        handl_kit_data_prelude::language_from_yaml().expect("canonical language assembles")
     })
 }
 

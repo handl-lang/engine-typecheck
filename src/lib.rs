@@ -207,7 +207,7 @@ impl From<LangError> for CheckError {
 /// emitting `not-yet-checked` Info diagnostics rather than silently passing.
 ///
 /// The caller supplies the assembled [`Language`] — canonical callers get it
-/// from `handl-kit-data-canonical`/`handl-kit-canonical` (the single
+/// from `handl-kit-data-prelude`/`handl-kit-canonical` (the single
 /// YAML→`Language` assembly path, which also runs transform-rule validation,
 /// ADR-0094). This crate no longer embeds its own copy of the canonical
 /// data.
@@ -226,7 +226,7 @@ pub fn check_module(lang: &Language, src: &str) -> Result<TypecheckReport, Check
 /// runtime would auto-wire for `.hnl` sources — module-chain names, flat
 /// host-function names, and ambient globals (ADR-0096). This crate carries
 /// no host-name knowledge: the set comes from the host's module registry /
-/// resolver (e.g. `handl_kit_canonical::canonical_wire_names`), keeping the
+/// resolver (e.g. `handl_kit_prelude::prelude_wire_names`), keeping the
 /// checker engine-generic.
 ///
 /// # Errors
@@ -334,7 +334,7 @@ mod tests {
     fn canonical_lang() -> &'static Language {
         static LANG: std::sync::OnceLock<Language> = std::sync::OnceLock::new();
         LANG.get_or_init(|| {
-            handl_kit_data_canonical::language_from_yaml().expect("canonical language assembles")
+            handl_kit_data_prelude::language_from_yaml().expect("canonical language assembles")
         })
     }
 

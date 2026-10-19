@@ -1170,7 +1170,7 @@ fn check_pass(
 /// Check a handl module source text (ADR-0088) against `lang`.
 ///
 /// The caller supplies the assembled [`Language`] (e.g. from
-/// `handl-kit-data-canonical`/`handl-kit-canonical`) — the checker no longer
+/// `handl-kit-data-prelude`/`handl-kit-canonical`) — the checker no longer
 /// embeds and merges its own copy of the canonical YAML data, removing the
 /// duplicated assembly path that could drift from the canonical kit.
 ///
@@ -1239,7 +1239,7 @@ mod tests {
     use super::*;
 
     /// Canonical-language assembly coverage (transform-rule validation,
-    /// `desugar:` lowering, clean merge) lives in `handl-kit-data-canonical`
+    /// `desugar:` lowering, clean merge) lives in `handl-kit-data-prelude`
     /// — the single assembly path this crate now consumes (see
     /// `merge_rejects_invalid_transform_rules`,
     /// `desugar_field_still_lowers_into_transforms`, and
@@ -1256,7 +1256,7 @@ mod tests {
 
     #[test]
     fn debug_parse_cli() {
-        let lang = handl_kit_data_canonical::language_from_yaml().expect("assemble");
+        let lang = handl_kit_data_prelude::language_from_yaml().expect("assemble");
         let src = "f :: (desc: String) ~> { description: desc }";
         let ast = parse_chunk(&lang, src).expect("parse");
         for i in 0..ast.len() {
