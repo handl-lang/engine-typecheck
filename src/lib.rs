@@ -9,11 +9,11 @@
 //! [`handl_platform::ModuleLookup`] from the `handl-platform` crate (type
 //! rules may call host functions).
 //! **No typecheck engine code lives here except the bootstrap checker** — the
-//! abstraction is the contract. The concrete engines are
-//! `hnl-engine-typecheck-handl` (an interpreted `.hnl` model, the
-//! engine the canonical kit registers under the name `"handl"`) and this
-//! crate's own Rust [`check_module`] bootstrap checker, which hosts fall back
-//! to. Engines are selected via `runtime.typecheck` in the kit data.
+//! abstraction is the contract. The concrete engine is
+//! `hnl-engine-typecheck-nbe` (registered by the canonical kit under the
+//! name `"nbe"`); this crate's own Rust [`check_module`] bootstrap scope
+//! checker backs the `hnl lint` `unbound-wire`/`unbound-export` rules.
+//! Engines are selected via `runtime.typecheck` in the kit data.
 //!
 //! Engines consume [`handl_language::Language`] **data** — they look up
 //! `lang.types[node.kind]` to find a [`handl_language::Term`] and
@@ -94,6 +94,12 @@ pub struct TypecheckResult {
     /// Keys are `AstRef::index()` values; values are the type `Value`
     /// computed for that node. Empty if the engine does not record them.
     pub node_types: HashMap<usize, Value>,
+    /// The module signature `Sig_m` — a `type.record`-shaped value whose
+    /// `fields` map each exported name to its checked type (phase-1 spec
+    /// WS-B: a module typechecks to its signature record; `import m`
+    /// binds `m : Sig_m`). `Value::Null` when the engine does not track
+    /// exports.
+    pub signature: Value,
 }
 
 /// The trait a typecheck engine implements.
