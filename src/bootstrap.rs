@@ -611,6 +611,20 @@ fn pattern_bound_names(lang: &Language, ast: &Ast, node_ref: AstRef, out: &mut H
             }
         }
         _ => {
+            // Constructor/tag patterns (`Succ(p)`, `ok(x)`) are
+            // `call`-shaped: the `callee` child is the constructor name
+            // (a reference, not a binder) and every later child is a
+            // sub-pattern that may bind. Identified data-drivenly by the
+            // `callee` child role (ADR-0081).
+            if let Ok(Some(callee_idx)) = lang.child_role_index(&node.kind, "callee") {
+                let children = children_of(node);
+                for (pos, &child_raw) in children.iter().enumerate() {
+                    if pos != callee_idx {
+                        pattern_bound_names(lang, ast, AstRef::new(child_raw), out);
+                    }
+                }
+                return;
+            }
             // Wrapper fallbacks for role-less shapes that still appear in
             // patterns: a `paren`-wrapped pattern uses the `body` role, and
             // a `type-annot`-wrapped pattern uses the `subject` role.
