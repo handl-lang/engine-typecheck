@@ -228,11 +228,61 @@ fn collect_data_ctors(lang: &Language, ast: &Ast, node_ref: AstRef, out: &mut Ha
         return;
     }
 
+    // `type-annot`-wrapped constructor (`VNil : Vec(0, a)` — the declared
+    // result-type annotation): the `subject` child is the constructor
+    // head; the `annot` is its result type and is ignored.
+    if let Ok(Some(subject_idx)) = lang.child_role_index(&node.kind, "subject") {
+        let children = children_of(node);
+        if let Some(&subject_raw) = children.get(subject_idx) {
+            collect_data_ctors(lang, ast, AstRef::new(subject_raw), out);
+        }
+        return;
+    }
+
     // Paren-wrapped constructor (e.g. `(Cons)`); unwrap via the `body` role.
     if let Ok(Some(body_idx)) = lang.child_role_index(&node.kind, "body") {
         let children = children_of(node);
         if let Some(&body_raw) = children.get(body_idx) {
             collect_data_ctors(lang, ast, AstRef::new(body_raw), out);
+        }
+    }
+}
+
+/// Collect `eq_<param>` witness names from a `data` family's head
+/// (`Vec(n : Nat, a : Type)` → `eq_n`, `eq_a`): `match` refinement binds
+/// an `eq_<param>` `Path` witness inside arm bodies, so those names read
+/// as in-scope there. They are collected into the module scope — this
+/// pass is a safety net, and the names are only ever *produced* by
+/// refinement.
+fn collect_data_params(lang: &Language, ast: &Ast, node_ref: AstRef, out: &mut HashSet<String>) {
+    let node = match ast.at(node_ref) {
+        Ok(n) => n,
+        Err(_) => return,
+    };
+    let children = children_of(node);
+    // Bare `var` head (`data Nat :: …`) has no params; a `call` head's
+    // params are the `args` children.
+    let args_idx = match lang.child_role_index(&node.kind, "args") {
+        Ok(Some(i)) => i,
+        _ => return,
+    };
+    for &raw in children.iter().skip(args_idx) {
+        let Ok(arg) = ast.at(AstRef::new(raw)) else {
+            continue;
+        };
+        // `type-annot` param — the `subject` is the name; `var` — itself.
+        let mut name = var_name(arg);
+        if name.is_none() {
+            if let Ok(Some(subject_idx)) = lang.child_role_index(&arg.kind, "subject") {
+                if let Some(&sr) = children_of(arg).get(subject_idx) {
+                    if let Ok(s) = ast.at(AstRef::new(sr)) {
+                        name = var_name(s);
+                    }
+                }
+            }
+        }
+        if let Some(n) = name {
+            out.insert(format!("eq_{n}"));
         }
     }
 }
@@ -251,11 +301,38 @@ fn binding_target_name(lang: &Language, ast: &Ast, node_ref: AstRef) -> Option<S
         return Some(name);
     }
     let children = children_of(node);
+    // `field-access` target — `type.Score := Nat` (a parameterless type
+    // alias) or `obj.field := v`: the bound name is the *field*, resolved
+    // before the generic role loop — the access's `target` role would
+    // descend into the object child (`type`) and "bind" the namespace.
+    if let Ok(Some(field_idx)) = lang.child_role_index(&node.kind, "field") {
+        if let Some(field) = node.payload.get("field").and_then(|v| v.as_str()) {
+            return Some(field.to_string());
+        }
+        if let Some(&raw) = children.get(field_idx) {
+            if let Some(name) = binding_target_name(lang, ast, AstRef::new(raw)) {
+                return Some(name);
+            }
+        }
+    }
+    // `call` target — `type.Id(A) := A` (a parameterized type alias) or
+    // `f(x) := body`: the bound name is the callee head's.
+    if let Ok(Some(callee_idx)) = lang.child_role_index(&node.kind, "callee") {
+        if let Some(&raw) = children.get(callee_idx) {
+            if let Some(name) = binding_target_name(lang, ast, AstRef::new(raw)) {
+                return Some(name);
+            }
+        }
+    }
     // `source` is tried first: a `dim_arrow` (`X: (A,B) ~[N]~> R`) stores
     // the declared name under `source` (in a `type-annot`), while its
     // `target` is the return-type expression — descending there would
-    // "bind" the result-type constructor (e.g. `Result`) instead.
-    for role in ["source", "target", "subject", "body"] {
+    // "bind" the result-type constructor (e.g. `Result`) instead. A
+    // `function` target (`narrow : T ~> U := f` parses as
+    // `assign(function(type-annot(narrow, T), U), f)`) is the same shape:
+    // `params` holds the annotated name, `body` the result type — so
+    // `params` precedes `body` here too.
+    for role in ["source", "target", "subject", "params", "body"] {
         if let Ok(Some(idx)) = lang.child_role_index(&node.kind, role) {
             if let Some(&raw) = children.get(idx) {
                 if let Some(name) = binding_target_name(lang, ast, AstRef::new(raw)) {
@@ -455,6 +532,12 @@ fn collect_decls(
                     data_ctors.insert(name.to_string());
                 }
             }
+            if let Ok(Some(ty_idx)) = lang.child_role_index(&root.kind, "type") {
+                let children = children_of(root);
+                if let Some(&ty_raw) = children.get(ty_idx) {
+                    collect_data_params(lang, &stmt.ast, AstRef::new(ty_raw), &mut data_ctors);
+                }
+            }
             if let Ok(Some(ctors_idx)) = lang.child_role_index(&root.kind, "constructors") {
                 let children = children_of(root);
                 if let Some(&ctors_raw) = children.get(ctors_idx) {
@@ -642,6 +725,124 @@ fn pattern_bound_names(lang: &Language, ast: &Ast, node_ref: AstRef, out: &mut H
     }
 }
 
+/// Wire-check the *reference* positions of a pattern — the parts
+/// [`pattern_bound_names`] deliberately does not bind. A `call`-shaped
+/// ctor pattern's `callee` child is a constructor *reference* (`VCons`,
+/// `somemod.trim`), checked like an expression against the outer scope;
+/// every other position is a sub-pattern (or a type annotation) and
+/// recurses structurally, mirroring `pattern_bound_names`' traversal.
+#[allow(clippy::too_many_arguments)]
+fn check_pattern_refs(
+    lang: &Language,
+    src: &str,
+    ast: &Ast,
+    node_ref: AstRef,
+    scope: &HashSet<String>,
+    stmt: &Stmt,
+    diags: &mut Vec<Diagnostic>,
+    references: &mut HashSet<String>,
+    pattern: bool,
+) {
+    let node = match ast.at(node_ref) {
+        Ok(n) => n,
+        Err(_) => return,
+    };
+    let children = children_of(node);
+    if let Ok(Some(callee_idx)) = lang.child_role_index(&node.kind, "callee") {
+        for (pos, &raw) in children.iter().enumerate() {
+            if pos == callee_idx {
+                check_expr(
+                    lang,
+                    src,
+                    ast,
+                    AstRef::new(raw),
+                    scope,
+                    stmt,
+                    diags,
+                    references,
+                    pattern,
+                );
+            } else {
+                check_pattern_refs(
+                    lang,
+                    src,
+                    ast,
+                    AstRef::new(raw),
+                    scope,
+                    stmt,
+                    diags,
+                    references,
+                    pattern,
+                );
+            }
+        }
+        return;
+    }
+    let role = lang
+        .ast
+        .get_by_identity(&node.kind)
+        .and_then(|s| s.pattern_role.as_deref());
+    // Sub-pattern positions, mirroring `pattern_bound_names`.
+    let subs: Vec<usize> = match role {
+        Some("leaf") => Vec::new(),
+        Some("rest") => lang
+            .child_role_index(&node.kind, "subject")
+            .ok()
+            .flatten()
+            .and_then(|i| children.get(i).copied())
+            .into_iter()
+            .collect(),
+        Some("sequence") => lang
+            .child_role_index(&node.kind, "elements")
+            .ok()
+            .flatten()
+            .map(|i| children.iter().skip(i).copied().collect())
+            .unwrap_or_default(),
+        Some("entries") => lang
+            .child_role_index(&node.kind, "entries")
+            .ok()
+            .flatten()
+            .map(|i| children.iter().skip(i).copied().collect())
+            .unwrap_or_default(),
+        Some("entry") => lang
+            .child_role_index(&node.kind, "value")
+            .ok()
+            .flatten()
+            .and_then(|i| children.get(i).copied())
+            .into_iter()
+            .collect(),
+        // Same wrapper fallbacks as `pattern_bound_names`: `paren` wraps
+        // via `body`, `type-annot` via `subject` (the annot is a type —
+        // not wire-checked).
+        _ => lang
+            .child_role_index(&node.kind, "body")
+            .ok()
+            .flatten()
+            .map(|i| children.iter().skip(i).copied().collect::<Vec<_>>())
+            .or_else(|| {
+                lang.child_role_index(&node.kind, "subject")
+                    .ok()
+                    .flatten()
+                    .and_then(|i| children.get(i).copied())
+                    .map(|raw| vec![raw])
+            })
+            .unwrap_or_default(),
+    };
+    for raw in subs {
+        check_pattern_refs(
+            lang,
+            src,
+            ast,
+            AstRef::new(raw),
+            scope,
+            stmt,
+            diags,
+            references,
+            pattern,
+        );
+    }
+}
+
 /// Recursively check an expression subtree for unbound wires, `rec`
 /// not-yet-checked boundaries, and arrow-kind consistency.
 ///
@@ -695,6 +896,19 @@ fn check_expr(
         let mut inner_scope = scope.clone();
         if let Some(&params_raw) = children.get(pi) {
             pattern_bound_names(lang, ast, AstRef::new(params_raw), &mut inner_scope);
+            // Reference positions in the params (a `call` pattern's
+            // `callee`) are checked against the *outer* scope.
+            check_pattern_refs(
+                lang,
+                src,
+                ast,
+                AstRef::new(params_raw),
+                scope,
+                stmt,
+                diags,
+                references,
+                pattern,
+            );
         }
         if let Some(&body_raw) = children.get(bi) {
             check_expr(
@@ -725,6 +939,20 @@ fn check_expr(
         let mut body_scope = scope.clone();
         if let Some(&pattern_raw) = children.get(pi) {
             pattern_bound_names(lang, ast, AstRef::new(pattern_raw), &mut body_scope);
+            // Reference positions in the pattern (a `call` pattern's
+            // `callee` — the ctor name) are checked against the *outer*
+            // scope, not the extended one.
+            check_pattern_refs(
+                lang,
+                src,
+                ast,
+                AstRef::new(pattern_raw),
+                scope,
+                stmt,
+                diags,
+                references,
+                pattern,
+            );
         }
         for (pos, &child_raw) in children.iter().enumerate() {
             if pos == pi {
@@ -1011,6 +1239,10 @@ fn check_pass(
         .chain(data_ctors.iter().cloned())
         .chain(prelude.iter().cloned())
         .chain(lang.globals.keys().cloned())
+        // `refl` — the canonical `Path` introduction (ADR-0120), a var
+        // the judge resolves without a source binding; `type` — the
+        // alias namespace head (`type.Id(A) := A`, ADR-0154 §3).
+        .chain(["refl".to_string(), "type".to_string()])
         .collect();
 
     // Phase 2a: every exported *value* must be bound. A type signature
