@@ -638,6 +638,61 @@ fn dim_param_names(lang: &Language, ast: &Ast, node_ref: AstRef, out: &mut HashS
     }
 }
 
+/// Implicit index binders of a `name{b, …}` binding target (phase-2
+/// WS-C): the brace args are index variables scoped over the bound value
+/// — `vec_map{n, a, b} := body` means the checker's implicit `Pi`s bind
+/// `n`/`a`/`b` inside `body`. The `index_app` head sits at the
+/// `type-annot` subject of the target (`f{n,a} : T`, or inside the
+/// `params`/`source` operand of an arrow annotation `f{n,a} : A ~> B`);
+/// index_apps *inside* the annotation (`Vec{n, a}`) are uses, not
+/// binders, and are not reached by this descent. A sorted binder
+/// `{n : Nat}` binds the `type-annot`'s subject var.
+fn implicit_binder_names(
+    lang: &Language,
+    ast: &Ast,
+    node_ref: AstRef,
+    out: &mut HashSet<String>,
+) {
+    let node = match ast.at(node_ref) {
+        Ok(n) => n,
+        Err(_) => return,
+    };
+    let children = children_of(node);
+    if node.kind == "index_app" {
+        let Some(args_idx) = lang.child_role_index(&node.kind, "args").ok().flatten()
+        else {
+            return;
+        };
+        for &raw in children.iter().skip(args_idx) {
+            if let Ok(arg) = ast.at(AstRef::new(raw)) {
+                if let Some(name) = var_name(arg) {
+                    out.insert(name);
+                } else if let Ok(Some(subj_idx)) = lang.child_role_index(&arg.kind, "subject") {
+                    // `{b : S}` — bind the annotated subject var.
+                    if let Some(&subj_raw) = children_of(arg).get(subj_idx) {
+                        if let Ok(subj) = ast.at(AstRef::new(subj_raw)) {
+                            if let Some(name) = var_name(subj) {
+                                out.insert(name);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return;
+    }
+    // Descend toward the `type-annot` subject: `function`'s `params`,
+    // `dim_arrow`'s `source`, `type-annot`'s own `subject`.
+    for role in ["subject", "params", "source"] {
+        if let Ok(Some(idx)) = lang.child_role_index(&node.kind, role) {
+            if let Some(&raw) = children.get(idx) {
+                implicit_binder_names(lang, ast, AstRef::new(raw), out);
+                return;
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Expression checking
 // ---------------------------------------------------------------------------
@@ -1129,6 +1184,12 @@ fn check_expr(
                     let mut value_scope = block_scope.clone();
                     if let Some(&target_raw) = grandchildren.get(ti) {
                         dim_param_names(lang, ast, AstRef::new(target_raw), &mut value_scope);
+                        implicit_binder_names(
+                            lang,
+                            ast,
+                            AstRef::new(target_raw),
+                            &mut value_scope,
+                        );
                     }
                     check_expr(
                         lang,
@@ -1331,6 +1392,7 @@ fn check_pass(
             let mut value_scope = module_scope.clone();
             if let Some(&target_raw) = children.get(target_idx) {
                 dim_param_names(lang, &stmt.ast, AstRef::new(target_raw), &mut value_scope);
+                implicit_binder_names(lang, &stmt.ast, AstRef::new(target_raw), &mut value_scope);
             }
             check_expr(
                 lang,
