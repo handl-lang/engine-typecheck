@@ -60,6 +60,8 @@ const KIND_VAR: &str = "var";
 const KIND_ENTRY: &str = "entry";
 /// The v0.1 surface kind for a field access (`target.field`).
 const KIND_FIELD_ACCESS: &str = "field-access";
+
+const KIND_CALL: &str = "call";
 /// The v0.1 surface kind for an inductive type declaration (`data Name :: ...`).
 const KIND_DATA: &str = "data";
 
@@ -1141,6 +1143,55 @@ fn check_expr(
         return;
     }
 
+    // `perform(op, arg)` / `io.perform(op, arg)` — the `IO<sig>` op-emission
+    // builtin (ADR-0153 §4): the op operand (the call's first argument) is
+    // an op *name* — a bare `var` there names the op the way an object
+    // `key:` names a field or a `field-access` names its slot — not a wire
+    // reference. The callee and the argument operand still check normally,
+    // and a non-`var` op operand is walked so unbound wires inside a
+    // computed operand still report (`synth_perform` then decides the
+    // operand isn't a valid op name).
+    if node.kind == KIND_CALL {
+        let children = children_of(node);
+        let callee_is_perform = children
+            .first()
+            .and_then(|&raw| ast.at(AstRef::new(raw)).ok())
+            .map_or(false, |callee| {
+                var_name(callee).as_deref() == Some("perform")
+                    || (callee.kind == KIND_FIELD_ACCESS
+                        && children_of(callee)
+                            .get(1)
+                            .and_then(|&raw| ast.at(AstRef::new(raw)).ok())
+                            .and_then(|field| var_name(field))
+                            .as_deref()
+                            == Some("perform"))
+            });
+        if callee_is_perform {
+            for (pos, &child_raw) in children.iter().enumerate() {
+                let child_ref = AstRef::new(child_raw);
+                if pos == 1 {
+                    if let Ok(child) = ast.at(child_ref) {
+                        if var_name(child).is_some() {
+                            continue;
+                        }
+                    }
+                }
+                check_expr(
+                    lang,
+                    src,
+                    ast,
+                    child_ref,
+                    scope,
+                    stmt,
+                    diags,
+                    references,
+                    pattern,
+                );
+            }
+            return;
+        }
+    }
+
     // Sequential-statement containers: a node declaring a variadic
     // `statements` role (`block` from `do { ... }`) binds names
     // left-to-right — an `assign` target or an import declaration's bound
@@ -1155,6 +1206,78 @@ fn check_expr(
                 Ok(n) => n,
                 Err(_) => continue,
             };
+            // `stmt.export` — an `export` declaration inside block
+            // context: `export x := e` parses as
+            // `export(assign(x, e))`. The wrapped binding enters the
+            // sibling scope like a plain `x := e` (the runtime's
+            // `export` op env-assigns the name, engine-exec 05d9bba),
+            // so its name is in scope for the rest of the block. A bare
+            // `export x` (re-export) keeps the top-level contract: the
+            // name must already be bound. Signature exports
+            // (`export x: T ~> U`) declare a name with no value — the
+            // statement itself is skipped either way (no checkable
+            // expression at the export level).
+            if child.kind == KIND_EXPORT {
+                if let Some(&raw) = children_of(child).first() {
+                    let inner_ref = AstRef::new(raw);
+                    if let Ok(inner) = ast.at(inner_ref) {
+                        let ti = lang
+                            .child_role_index(&inner.kind, "target")
+                            .ok()
+                            .flatten();
+                        let vi = lang
+                            .child_role_index(&inner.kind, "value")
+                            .ok()
+                            .flatten();
+                        if let (Some(ti), Some(vi)) = (ti, vi) {
+                            let grandchildren = children_of(inner);
+                            if let Some(&target_raw) = grandchildren.get(ti) {
+                                let target_ref = AstRef::new(target_raw);
+                                if let Some(name) =
+                                    binding_target_name(lang, ast, target_ref)
+                                {
+                                    block_scope.insert(name);
+                                }
+                                let mut value_scope = block_scope.clone();
+                                dim_param_names(lang, ast, target_ref, &mut value_scope);
+                                implicit_binder_names(
+                                    lang,
+                                    ast,
+                                    target_ref,
+                                    &mut value_scope,
+                                );
+                                if let Some(&value_raw) = grandchildren.get(vi) {
+                                    check_expr(
+                                        lang,
+                                        src,
+                                        ast,
+                                        AstRef::new(value_raw),
+                                        &value_scope,
+                                        stmt,
+                                        diags,
+                                        references,
+                                        pattern,
+                                    );
+                                }
+                            }
+                        } else if let Some(name) = var_name(inner) {
+                            // `export x` — the exported name must name an
+                            // existing block/module binding (same
+                            // `unbound-export` contract as the top level).
+                            if !block_scope.contains(&name) {
+                                let span = name_span(src, stmt, &name);
+                                diags.push(Diagnostic::new(
+                                    "unbound-export",
+                                    Severity::Error,
+                                    span,
+                                    format!("export `{name}` is not bound in this module"),
+                                ));
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
             // `stmt.import`: its bound names enter the sibling scope; the
             // statement itself carries no checkable expression (the child
             // is a specifier string or bound name, not a reference).
