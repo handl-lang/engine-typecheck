@@ -638,15 +638,16 @@ fn dim_param_names(lang: &Language, ast: &Ast, node_ref: AstRef, out: &mut HashS
     }
 }
 
-/// Implicit index binders of a `name{b, …}` binding target (phase-2
-/// WS-C): the brace args are index variables scoped over the bound value
-/// — `vec_map{n, a, b} := body` means the checker's implicit `Pi`s bind
-/// `n`/`a`/`b` inside `body`. The `index_app` head sits at the
-/// `type-annot` subject of the target (`f{n,a} : T`, or inside the
-/// `params`/`source` operand of an arrow annotation `f{n,a} : A ~> B`);
-/// index_apps *inside* the annotation (`Vec{n, a}`) are uses, not
-/// binders, and are not reached by this descent. A sorted binder
-/// `{n : Nat}` binds the `type-annot`'s subject var.
+/// Implicit index binders of a `name<b, …>` binding target (phase-2
+/// WS-C sugar, now spelled `<>`): the bracket args are index variables
+/// scoped over the bound value — `vec_map<n, a, b> := body` means the
+/// checker's implicit `Pi`s bind `n`/`a`/`b` inside `body`. The
+/// `index_app`/`dimension` head sits at the `type-annot` subject of the
+/// target (`f<n,a> : T`, or inside the `params`/`source` operand of an
+/// arrow annotation `f<n,a> : A ~> B`); bracket applications *inside*
+/// the annotation (`Vec<n, a>`) are uses, not binders, and are not
+/// reached by this descent. A sorted binder `<n : Nat>` binds the
+/// `type-annot`'s subject var.
 fn implicit_binder_names(
     lang: &Language,
     ast: &Ast,
@@ -658,7 +659,7 @@ fn implicit_binder_names(
         Err(_) => return,
     };
     let children = children_of(node);
-    if node.kind == "index_app" {
+    if matches!(node.kind.as_str(), "index_app" | "dimension") {
         let Some(args_idx) = lang.child_role_index(&node.kind, "args").ok().flatten()
         else {
             return;
@@ -668,7 +669,7 @@ fn implicit_binder_names(
                 if let Some(name) = var_name(arg) {
                     out.insert(name);
                 } else if let Ok(Some(subj_idx)) = lang.child_role_index(&arg.kind, "subject") {
-                    // `{b : S}` — bind the annotated subject var.
+                    // `<b : S>` — bind the annotated subject var.
                     if let Some(&subj_raw) = children_of(arg).get(subj_idx) {
                         if let Ok(subj) = ast.at(AstRef::new(subj_raw)) {
                             if let Some(name) = var_name(subj) {
@@ -1245,6 +1246,45 @@ fn check_expr(
         return;
     }
 
+    // `instance <constraint> := <dict>` (phase-3 WS-A): an unbound `var`
+    // in the `constraint` child is a declaration-site index binder —
+    // implicit generalization makes `instance Eq(List(a))` bind `a` as
+    // the instance's index parameter — not an unbound wire. The `dict`
+    // child is a closed value and still checks in the ambient scope.
+    // Data-driven via the `constraint` role on `ast.instance`.
+    if let Ok(Some(constraint_idx)) = lang.child_role_index(&node.kind, "constraint") {
+        let children = children_of(node);
+        let mut inst_scope = scope.clone();
+        if let Some(&constraint_raw) = children.get(constraint_idx) {
+            collect_unbound_vars(
+                lang,
+                ast,
+                AstRef::new(constraint_raw),
+                scope,
+                &mut inst_scope,
+            );
+        }
+        for (pos, &child_raw) in children.iter().enumerate() {
+            let child_scope = if pos == constraint_idx {
+                &inst_scope
+            } else {
+                scope
+            };
+            check_expr(
+                lang,
+                src,
+                ast,
+                AstRef::new(child_raw),
+                child_scope,
+                stmt,
+                diags,
+                references,
+                pattern,
+            );
+        }
+        return;
+    }
+
     // Generic recursion: walk all children by positional `children` array.
     // (Roles are used above for named slots; the remaining children are
     // walked positionally per ADR-0081's fallback for shapes without roles.)
@@ -1260,6 +1300,32 @@ fn check_expr(
             references,
             pattern,
         );
+    }
+}
+
+/// `var` names in a subtree that `scope` doesn't already bind — the
+/// `instance` constraint's implicit index parameters (phase-3 WS-A;
+/// `instance Eq(List(a))` generalizes `a`). `_` is never a reference.
+fn collect_unbound_vars(
+    lang: &Language,
+    ast: &Ast,
+    node_ref: AstRef,
+    scope: &HashSet<String>,
+    out: &mut HashSet<String>,
+) {
+    let _ = lang;
+    let node = match ast.at(node_ref) {
+        Ok(n) => n,
+        Err(_) => return,
+    };
+    if let Some(name) = var_name(node) {
+        if !name.is_empty() && name != "_" && !scope.contains(&name) {
+            out.insert(name);
+        }
+        return;
+    }
+    for child in children_of(node) {
+        collect_unbound_vars(lang, ast, AstRef::new(child), scope, out);
     }
 }
 
