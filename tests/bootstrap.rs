@@ -572,3 +572,45 @@ fn plain_export_still_requires_a_binding() {
         report.diagnostics
     );
 }
+/// The ADR-0158 family-declaration matrix.
+///
+/// The generator-record spelling is the live surface (`data … ::` is retired),
+/// so every shape below must check cleanly. These cases were established by
+/// hand while debugging the lowering; they live here so the next change gets
+/// instant feedback instead of a rebuild of the `typecheck` extension.
+///
+/// The two failing rows are marked `#[ignore]`-free on purpose: they must pass
+/// once the lowering/ctor-extraction defects are fixed, and fail loudly until
+/// then.
+#[test]
+fn family_record_declarations_check() {
+    let cases: &[(&str, &str)] = &[
+        ("nullary ctor only", "N := {\n  Zero : N\n}\n"),
+        (
+            "bare ctor plus arrow ctor",
+            "P := {\n  PN : P,\n  PC : (x : Num) ~> P\n}\n",
+        ),
+        (
+            "two-argument arrow ctor",
+            "PE := {\n  PE : (pos : Num, msg : Str) ~> PE\n}\n",
+        ),
+        (
+            "indexed family, bare + arrow ctor",
+            "Vec<n : Nat, a : Type> := {\n  VNil  : Vec(0, a),\n  VCons : (x : a, xs : Vec(n, a)) ~> Vec(n + 1, a)\n}\n",
+        ),
+    ];
+
+    for (name, src) in cases {
+        let report = check_module(lang(), src).expect("parse");
+        assert_clean(&report);
+        eprintln!("ok: {name}");
+    }
+}
+
+/// The measured failing shapes, kept as documentation of the open defects.
+#[test]
+fn family_record_lone_arrow_ctor() {
+    let src = "P := {\n  PC : (x : Num) ~> P\n}\n";
+    let report = check_module(lang(), src).expect("parse");
+    assert_clean(&report);
+}
