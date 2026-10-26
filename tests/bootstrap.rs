@@ -5,7 +5,7 @@
 //! diagnostics in the [`TypecheckReport`].
 
 use handl_language::Language;
-use hnl_engine_typecheck::{CheckError, TypecheckReport, check_module};
+use hnl_engine_typecheck::{CheckError, TypecheckReport, check_module, check_module_with_prelude};
 use handl_plugin_ext_diag::Severity;
 
 /// The canonical language for the bootstrap checker — supplied by the caller
@@ -613,4 +613,22 @@ fn family_record_lone_arrow_ctor() {
     let src = "P := {\n  PC : (x : Num) ~> P\n}\n";
     let report = check_module(lang(), src).expect("parse");
     assert_clean(&report);
+}
+
+/// Candidate 2: the extension calls `check_module_with_prelude` (host wire
+/// names seeded) rather than `check_module`. If this reproduces `unbound P`,
+/// the defect is in the prelude path, not the language assembly.
+#[test]
+fn family_record_with_empty_prelude() {
+    use std::collections::HashSet;
+    let empty = HashSet::new();
+    for (name, src) in [
+        ("lone arrow ctor", "P := {\n  PC : (x : Num) ~> P\n}\n"),
+        ("two-arg arrow ctor", "PE := {\n  PE : (pos : Num, msg : Str) ~> PE\n}\n"),
+        ("bare + arrow", "P := {\n  PN : P,\n  PC : (x : Num) ~> P\n}\n"),
+    ] {
+        let report = check_module_with_prelude(lang(), src, &empty).expect("parse");
+        assert_clean(&report);
+        eprintln!("ok with empty prelude: {name}");
+    }
 }
