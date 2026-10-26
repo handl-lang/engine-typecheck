@@ -632,3 +632,18 @@ fn family_record_with_empty_prelude() {
         eprintln!("ok with empty prelude: {name}");
     }
 }
+
+/// The `data` node must never name itself as a child: the positivity walk
+/// follows `function` codomains without a visited set, so a self-edge makes it
+/// loop forever (and the ctor never binds).
+#[test]
+fn family_record_has_no_self_reference() {
+    for src in [
+        "P := {\n  PC : (x : Number) ~> P\n}\n",
+        "PE := {\n  PE : (pos : Number, msg : Str) ~> PE\n}\n",
+        "P := {\n  PN : P,\n  PC : (x : Number) ~> P\n}\n",
+    ] {
+        let report = check_module(lang(), src).expect("parse");
+        assert_clean(&report);
+    }
+}
