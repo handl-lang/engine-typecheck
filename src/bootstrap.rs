@@ -20,10 +20,10 @@
 //! (ADR-0091) — no local variant types are defined here.
 
 use handl_language::{Ast, AstNode, AstRef, Language};
+use handl_plugin_ext_diag::{Diagnostic, Severity, Span, split_statements};
 use hnl_engine_lex_pattern::lex;
 use hnl_engine_parse::{ParserEngine, ParserRequest};
 use hnl_engine_parse_pratt::PrattEngine;
-use handl_plugin_ext_diag::{Diagnostic, Severity, Span, split_statements};
 use serde_json::Value;
 
 use std::collections::{HashMap, HashSet};
@@ -222,10 +222,10 @@ fn collect_data_ctors(lang: &Language, ast: &Ast, node_ref: AstRef, out: &mut Ha
         if let Some(&left_raw) = children.get(left_idx) {
             collect_data_ctors(lang, ast, AstRef::new(left_raw), out);
         }
-        if let Ok(Some(right_idx)) = lang.child_role_index(&node.kind, "right") {
-            if let Some(&right_raw) = children.get(right_idx) {
-                collect_data_ctors(lang, ast, AstRef::new(right_raw), out);
-            }
+        if let Ok(Some(right_idx)) = lang.child_role_index(&node.kind, "right")
+            && let Some(&right_raw) = children.get(right_idx)
+        {
+            collect_data_ctors(lang, ast, AstRef::new(right_raw), out);
         }
         return;
     }
@@ -274,14 +274,12 @@ fn collect_data_params(lang: &Language, ast: &Ast, node_ref: AstRef, out: &mut H
         };
         // `type-annot` param — the `subject` is the name; `var` — itself.
         let mut name = var_name(arg);
-        if name.is_none() {
-            if let Ok(Some(subject_idx)) = lang.child_role_index(&arg.kind, "subject") {
-                if let Some(&sr) = children_of(arg).get(subject_idx) {
-                    if let Ok(s) = ast.at(AstRef::new(sr)) {
-                        name = var_name(s);
-                    }
-                }
-            }
+        if name.is_none()
+            && let Ok(Some(subject_idx)) = lang.child_role_index(&arg.kind, "subject")
+            && let Some(&sr) = children_of(arg).get(subject_idx)
+            && let Ok(s) = ast.at(AstRef::new(sr))
+        {
+            name = var_name(s);
         }
         if let Some(n) = name {
             out.insert(format!("eq_{n}"));
@@ -311,20 +309,19 @@ fn binding_target_name(lang: &Language, ast: &Ast, node_ref: AstRef) -> Option<S
         if let Some(field) = node.payload.get("field").and_then(|v| v.as_str()) {
             return Some(field.to_string());
         }
-        if let Some(&raw) = children.get(field_idx) {
-            if let Some(name) = binding_target_name(lang, ast, AstRef::new(raw)) {
-                return Some(name);
-            }
+        if let Some(&raw) = children.get(field_idx)
+            && let Some(name) = binding_target_name(lang, ast, AstRef::new(raw))
+        {
+            return Some(name);
         }
     }
     // `call` target — `type.Id(A) := A` (a parameterized type alias) or
     // `f(x) := body`: the bound name is the callee head's.
-    if let Ok(Some(callee_idx)) = lang.child_role_index(&node.kind, "callee") {
-        if let Some(&raw) = children.get(callee_idx) {
-            if let Some(name) = binding_target_name(lang, ast, AstRef::new(raw)) {
-                return Some(name);
-            }
-        }
+    if let Ok(Some(callee_idx)) = lang.child_role_index(&node.kind, "callee")
+        && let Some(&raw) = children.get(callee_idx)
+        && let Some(name) = binding_target_name(lang, ast, AstRef::new(raw))
+    {
+        return Some(name);
     }
     // `source` is tried first: a `dim_arrow` (`X: (A,B) ~[N]~> R`) stores
     // the declared name under `source` (in a `type-annot`), while its
@@ -335,12 +332,11 @@ fn binding_target_name(lang: &Language, ast: &Ast, node_ref: AstRef) -> Option<S
     // `params` holds the annotated name, `body` the result type — so
     // `params` precedes `body` here too.
     for role in ["source", "target", "subject", "params", "body"] {
-        if let Ok(Some(idx)) = lang.child_role_index(&node.kind, role) {
-            if let Some(&raw) = children.get(idx) {
-                if let Some(name) = binding_target_name(lang, ast, AstRef::new(raw)) {
-                    return Some(name);
-                }
-            }
+        if let Ok(Some(idx)) = lang.child_role_index(&node.kind, role)
+            && let Some(&raw) = children.get(idx)
+            && let Some(name) = binding_target_name(lang, ast, AstRef::new(raw))
+        {
+            return Some(name);
         }
     }
     None
@@ -354,7 +350,8 @@ fn is_binding_shape(lang: &Language, node: &AstNode) -> bool {
         .ok()
         .flatten()
         .is_some()
-        && lang.child_role_index(&node.kind, "value")
+        && lang
+            .child_role_index(&node.kind, "value")
             .ok()
             .flatten()
             .is_some()
@@ -434,21 +431,21 @@ fn collect_decls(
         let value_idx = lang.child_role_index(&root.kind, "value").ok().flatten();
         if let (Some(ti), Some(_vi)) = (target_idx, value_idx) {
             let children = children_of(root);
-            if let Some(&target_raw) = children.get(ti) {
-                if let Some(name) = binding_target_name(lang, &stmt.ast, AstRef::new(target_raw)) {
-                    if seen.contains_key(&name) {
-                        let span = name_span(src, stmt, &name);
-                        diags.push(Diagnostic::new(
-                            "duplicate-binding",
-                            Severity::Error,
-                            span,
-                            format!("duplicate binding: `{name}`"),
-                        ));
-                    } else {
-                        seen.insert(name.clone(), i);
-                    }
-                    bindings.push(Binding { name, stmt_idx: i });
+            if let Some(&target_raw) = children.get(ti)
+                && let Some(name) = binding_target_name(lang, &stmt.ast, AstRef::new(target_raw))
+            {
+                if seen.contains_key(&name) {
+                    let span = name_span(src, stmt, &name);
+                    diags.push(Diagnostic::new(
+                        "duplicate-binding",
+                        Severity::Error,
+                        span,
+                        format!("duplicate binding: `{name}`"),
+                    ));
+                } else {
+                    seen.insert(name.clone(), i);
                 }
+                bindings.push(Binding { name, stmt_idx: i });
             }
             continue;
         }
@@ -529,10 +526,10 @@ fn collect_decls(
         // references to `Vec`/`Sorted` in type-expression position are
         // in scope (ADR-0120 Phase 4).
         if root.kind == KIND_DATA {
-            if let Some(name) = root.payload.get("name").and_then(|v| v.as_str()) {
-                if !name.is_empty() {
-                    data_ctors.insert(name.to_string());
-                }
+            if let Some(name) = root.payload.get("name").and_then(|v| v.as_str())
+                && !name.is_empty()
+            {
+                data_ctors.insert(name.to_string());
             }
             if let Ok(Some(ty_idx)) = lang.child_role_index(&root.kind, "type") {
                 let children = children_of(root);
@@ -571,12 +568,11 @@ fn stmt_import_bound_names(ast: &Ast, root: &AstNode) -> Vec<String> {
     // `import <name>` — the single child is a `var` carrying the name (the
     // `from`-form child is the path string, which `var_name` rejects).
     let children = children_of(root);
-    if let Some(&child_raw) = children.first() {
-        if let Ok(child_node) = ast.at(AstRef::new(child_raw)) {
-            if let Some(name) = var_name(child_node) {
-                bound.push(name);
-            }
-        }
+    if let Some(&child_raw) = children.first()
+        && let Ok(child_node) = ast.at(AstRef::new(child_raw))
+        && let Some(name) = var_name(child_node)
+    {
+        bound.push(name);
     }
     let alias = root.payload.get("alias").and_then(|v| v.as_str());
     let names_val = root.payload.get("names");
@@ -606,10 +602,10 @@ fn stmt_import_bound_names(ast: &Ast, root: &AstNode) -> Vec<String> {
             // name is usable qualified (`str.trim`) via the host module
             // chain.
             "*" => {
-                if let Some(p) = path {
-                    if is_bare_module_name(p) {
-                        bound.push(p.to_string());
-                    }
+                if let Some(p) = path
+                    && is_bare_module_name(p)
+                {
+                    bound.push(p.to_string());
                 }
             }
             _ => {}
@@ -632,10 +628,10 @@ fn dim_param_names(lang: &Language, ast: &Ast, node_ref: AstRef, out: &mut HashS
         return;
     };
     for &raw in children_of(node).iter().skip(args_idx) {
-        if let Ok(arg) = ast.at(AstRef::new(raw)) {
-            if let Some(name) = var_name(arg) {
-                out.insert(name);
-            }
+        if let Ok(arg) = ast.at(AstRef::new(raw))
+            && let Some(name) = var_name(arg)
+        {
+            out.insert(name);
         }
     }
 }
@@ -650,20 +646,14 @@ fn dim_param_names(lang: &Language, ast: &Ast, node_ref: AstRef, out: &mut HashS
 /// the annotation (`Vec<n, a>`) are uses, not binders, and are not
 /// reached by this descent. A sorted binder `<n : Nat>` binds the
 /// `type-annot`'s subject var.
-fn implicit_binder_names(
-    lang: &Language,
-    ast: &Ast,
-    node_ref: AstRef,
-    out: &mut HashSet<String>,
-) {
+fn implicit_binder_names(lang: &Language, ast: &Ast, node_ref: AstRef, out: &mut HashSet<String>) {
     let node = match ast.at(node_ref) {
         Ok(n) => n,
         Err(_) => return,
     };
     let children = children_of(node);
     if matches!(node.kind.as_str(), "index_app" | "dimension") {
-        let Some(args_idx) = lang.child_role_index(&node.kind, "args").ok().flatten()
-        else {
+        let Some(args_idx) = lang.child_role_index(&node.kind, "args").ok().flatten() else {
             return;
         };
         for &raw in children.iter().skip(args_idx) {
@@ -672,12 +662,11 @@ fn implicit_binder_names(
                     out.insert(name);
                 } else if let Ok(Some(subj_idx)) = lang.child_role_index(&arg.kind, "subject") {
                     // `<b : S>` — bind the annotated subject var.
-                    if let Some(&subj_raw) = children_of(arg).get(subj_idx) {
-                        if let Ok(subj) = ast.at(AstRef::new(subj_raw)) {
-                            if let Some(name) = var_name(subj) {
-                                out.insert(name);
-                            }
-                        }
+                    if let Some(&subj_raw) = children_of(arg).get(subj_idx)
+                        && let Ok(subj) = ast.at(AstRef::new(subj_raw))
+                        && let Some(name) = var_name(subj)
+                    {
+                        out.insert(name);
                     }
                 }
             }
@@ -687,11 +676,11 @@ fn implicit_binder_names(
     // Descend toward the `type-annot` subject: `function`'s `params`,
     // `dim_arrow`'s `source`, `type-annot`'s own `subject`.
     for role in ["subject", "params", "source"] {
-        if let Ok(Some(idx)) = lang.child_role_index(&node.kind, role) {
-            if let Some(&raw) = children.get(idx) {
-                implicit_binder_names(lang, ast, AstRef::new(raw), out);
-                return;
-            }
+        if let Ok(Some(idx)) = lang.child_role_index(&node.kind, role)
+            && let Some(&raw) = children.get(idx)
+        {
+            implicit_binder_names(lang, ast, AstRef::new(raw), out);
+            return;
         }
     }
 }
@@ -715,10 +704,10 @@ fn pattern_bound_names(lang: &Language, ast: &Ast, node_ref: AstRef, out: &mut H
 
     match role {
         Some("leaf") => {
-            if let Some(name) = node.payload.as_str() {
-                if name != "_" {
-                    out.insert(name.to_string());
-                }
+            if let Some(name) = node.payload.as_str()
+                && name != "_"
+            {
+                out.insert(name.to_string());
             }
         }
         Some("rest") => {
@@ -909,6 +898,10 @@ fn check_pattern_refs(
 /// unused-import detection). `pattern` marks a quoted rule term (inside
 /// `~[N]~>`): an unbound `var` there is a pattern variable, not an
 /// unbound wire.
+// The recursive expression walk threads the whole checking context (lang,
+// source, arena, node, scope, references, pattern flag, diagnostics); bundling
+// them into a struct would only add indirection.
+#[allow(clippy::too_many_arguments)]
 fn check_expr(
     lang: &Language,
     src: &str,
@@ -1050,24 +1043,24 @@ fn check_expr(
         lang.child_role_index(&node.kind, "annot"),
     ) {
         let children = children_of(node);
-        if let Some(&annot_raw) = children.get(annot_idx) {
-            if let Ok(annot_node) = ast.at(AstRef::new(annot_raw)) {
-                let is_bare_type = var_name(&annot_node).map_or(false, |n| {
-                    !scope.contains(&n) && n.chars().next().is_some_and(|c| c.is_ascii_uppercase())
-                });
-                if !is_bare_type {
-                    check_expr(
-                        lang,
-                        src,
-                        ast,
-                        AstRef::new(annot_raw),
-                        scope,
-                        stmt,
-                        diags,
-                        references,
-                        pattern,
-                    );
-                }
+        if let Some(&annot_raw) = children.get(annot_idx)
+            && let Ok(annot_node) = ast.at(AstRef::new(annot_raw))
+        {
+            let is_bare_type = var_name(annot_node).is_some_and(|n| {
+                !scope.contains(&n) && n.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+            });
+            if !is_bare_type {
+                check_expr(
+                    lang,
+                    src,
+                    ast,
+                    AstRef::new(annot_raw),
+                    scope,
+                    stmt,
+                    diags,
+                    references,
+                    pattern,
+                );
             }
         }
         // `subject` is intentionally not walked — it is a binder/label, not a
@@ -1097,25 +1090,24 @@ fn check_expr(
     if node.kind == KIND_ENTRY {
         if let Ok(Some(value_idx)) = lang.child_role_index(&node.kind, "value") {
             let children = children_of(node);
-            if let Some(&value_raw) = children.get(value_idx) {
-                if let Ok(value_node) = ast.at(AstRef::new(value_raw)) {
-                    let is_bare_type = var_name(&value_node).map_or(false, |n| {
-                        !scope.contains(&n)
-                            && n.chars().next().is_some_and(|c| c.is_ascii_uppercase())
-                    });
-                    if !is_bare_type {
-                        check_expr(
-                            lang,
-                            src,
-                            ast,
-                            AstRef::new(value_raw),
-                            scope,
-                            stmt,
-                            diags,
-                            references,
-                            pattern,
-                        );
-                    }
+            if let Some(&value_raw) = children.get(value_idx)
+                && let Ok(value_node) = ast.at(AstRef::new(value_raw))
+            {
+                let is_bare_type = var_name(value_node).is_some_and(|n| {
+                    !scope.contains(&n) && n.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+                });
+                if !is_bare_type {
+                    check_expr(
+                        lang,
+                        src,
+                        ast,
+                        AstRef::new(value_raw),
+                        scope,
+                        stmt,
+                        diags,
+                        references,
+                        pattern,
+                    );
                 }
             }
         }
@@ -1156,36 +1148,27 @@ fn check_expr(
         let callee_is_perform = children
             .first()
             .and_then(|&raw| ast.at(AstRef::new(raw)).ok())
-            .map_or(false, |callee| {
+            .is_some_and(|callee| {
                 var_name(callee).as_deref() == Some("perform")
                     || (callee.kind == KIND_FIELD_ACCESS
                         && children_of(callee)
                             .get(1)
                             .and_then(|&raw| ast.at(AstRef::new(raw)).ok())
-                            .and_then(|field| var_name(field))
+                            .and_then(var_name)
                             .as_deref()
                             == Some("perform"))
             });
         if callee_is_perform {
             for (pos, &child_raw) in children.iter().enumerate() {
                 let child_ref = AstRef::new(child_raw);
-                if pos == 1 {
-                    if let Ok(child) = ast.at(child_ref) {
-                        if var_name(child).is_some() {
-                            continue;
-                        }
-                    }
+                if pos == 1
+                    && let Ok(child) = ast.at(child_ref)
+                    && var_name(child).is_some()
+                {
+                    continue;
                 }
                 check_expr(
-                    lang,
-                    src,
-                    ast,
-                    child_ref,
-                    scope,
-                    stmt,
-                    diags,
-                    references,
-                    pattern,
+                    lang, src, ast, child_ref, scope, stmt, diags, references, pattern,
                 );
             }
             return;
@@ -1221,31 +1204,18 @@ fn check_expr(
                 if let Some(&raw) = children_of(child).first() {
                     let inner_ref = AstRef::new(raw);
                     if let Ok(inner) = ast.at(inner_ref) {
-                        let ti = lang
-                            .child_role_index(&inner.kind, "target")
-                            .ok()
-                            .flatten();
-                        let vi = lang
-                            .child_role_index(&inner.kind, "value")
-                            .ok()
-                            .flatten();
+                        let ti = lang.child_role_index(&inner.kind, "target").ok().flatten();
+                        let vi = lang.child_role_index(&inner.kind, "value").ok().flatten();
                         if let (Some(ti), Some(vi)) = (ti, vi) {
                             let grandchildren = children_of(inner);
                             if let Some(&target_raw) = grandchildren.get(ti) {
                                 let target_ref = AstRef::new(target_raw);
-                                if let Some(name) =
-                                    binding_target_name(lang, ast, target_ref)
-                                {
+                                if let Some(name) = binding_target_name(lang, ast, target_ref) {
                                     block_scope.insert(name);
                                 }
                                 let mut value_scope = block_scope.clone();
                                 dim_param_names(lang, ast, target_ref, &mut value_scope);
-                                implicit_binder_names(
-                                    lang,
-                                    ast,
-                                    target_ref,
-                                    &mut value_scope,
-                                );
+                                implicit_binder_names(lang, ast, target_ref, &mut value_scope);
                                 if let Some(&value_raw) = grandchildren.get(vi) {
                                     check_expr(
                                         lang,
@@ -1297,10 +1267,10 @@ fn check_expr(
             let value_idx = lang.child_role_index(&child.kind, "value").ok().flatten();
             if let (Some(ti), Some(vi)) = (target_idx, value_idx) {
                 let grandchildren = children_of(child);
-                if let Some(&target_raw) = grandchildren.get(ti) {
-                    if let Some(name) = binding_target_name(lang, ast, AstRef::new(target_raw)) {
-                        block_scope.insert(name);
-                    }
+                if let Some(&target_raw) = grandchildren.get(ti)
+                    && let Some(name) = binding_target_name(lang, ast, AstRef::new(target_raw))
+                {
+                    block_scope.insert(name);
                 }
                 if let Some(&value_raw) = grandchildren.get(vi) {
                     // A generic binding `f<N> := value` scopes `N` over
@@ -1308,12 +1278,7 @@ fn check_expr(
                     let mut value_scope = block_scope.clone();
                     if let Some(&target_raw) = grandchildren.get(ti) {
                         dim_param_names(lang, ast, AstRef::new(target_raw), &mut value_scope);
-                        implicit_binder_names(
-                            lang,
-                            ast,
-                            AstRef::new(target_raw),
-                            &mut value_scope,
-                        );
+                        implicit_binder_names(lang, ast, AstRef::new(target_raw), &mut value_scope);
                     }
                     check_expr(
                         lang,
@@ -1742,7 +1707,7 @@ mod tests {
     /// `desugar_field_still_lowers_into_transforms`, and
     /// `canonical_transforms_validate_clean` there). The language is
     /// injected, so these tests only cover check-side helpers.
-
+    ///
     /// The `CheckError::Language` rendering stays readable for callers that
     /// surface assembly failures (e.g. `hnl typecheck`).
     #[test]

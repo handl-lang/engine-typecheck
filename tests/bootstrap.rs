@@ -5,8 +5,8 @@
 //! diagnostics in the [`TypecheckReport`].
 
 use handl_language::Language;
-use hnl_engine_typecheck::{CheckError, TypecheckReport, check_module, check_module_with_prelude};
 use handl_plugin_ext_diag::Severity;
+use hnl_engine_typecheck::{CheckError, TypecheckReport, check_module, check_module_with_prelude};
 
 /// The canonical language for the bootstrap checker — supplied by the caller
 /// (the dev-dep on `handl-kit-data-prelude` is allowed to close the
@@ -624,8 +624,14 @@ fn family_record_with_empty_prelude() {
     let empty = HashSet::new();
     for (name, src) in [
         ("lone arrow ctor", "P := {\n  PC : (x : Num) ~> P\n}\n"),
-        ("two-arg arrow ctor", "PE := {\n  PE : (pos : Num, msg : Str) ~> PE\n}\n"),
-        ("bare + arrow", "P := {\n  PN : P,\n  PC : (x : Num) ~> P\n}\n"),
+        (
+            "two-arg arrow ctor",
+            "PE := {\n  PE : (pos : Num, msg : Str) ~> PE\n}\n",
+        ),
+        (
+            "bare + arrow",
+            "P := {\n  PN : P,\n  PC : (x : Num) ~> P\n}\n",
+        ),
     ] {
         let report = check_module_with_prelude(lang(), src, &empty).expect("parse");
         assert_clean(&report);

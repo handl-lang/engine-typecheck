@@ -258,7 +258,7 @@ mod tests {
         let t1 = Typecheck;
         let t2 = Typecheck;
         assert_eq!(t1, t2);
-        let t3 = Typecheck::default();
+        let t3 = Typecheck;
         assert_eq!(t1, t3);
     }
 
