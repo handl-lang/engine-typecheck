@@ -21,9 +21,8 @@
 
 use handl_language::{Ast, AstNode, AstRef, Language};
 use handl_plugin_ext_diag::{Diagnostic, Severity, Span, split_statements};
-use hnl_engine_lex_pattern::lex;
+use hnl_engine_lex::{LexerEngine, LexerRequest};
 use hnl_engine_parse::{ParserEngine, ParserRequest};
-use hnl_engine_parse_pratt::PrattEngine;
 use serde_json::Value;
 
 use std::collections::{HashMap, HashSet};
@@ -90,15 +89,19 @@ struct Stmt {
 }
 
 /// Parse a single statement chunk into an [`Ast`].
-fn parse_chunk(lang: &Language, text: &str) -> Result<Ast, CheckError> {
-    let tokens = lex(lang, text).map_err(CheckError::from)?;
+fn parse_chunk<L, P>(lang: &Language, text: &str, lexer: &L, parser: &P) -> Result<Ast, CheckError>
+where
+    L: LexerEngine + ?Sized,
+    P: ParserEngine + ?Sized,
+{
+    let tokens = lexer
+        .lex(lang, &LexerRequest::new(text))
+        .map_err(CheckError::from)?;
     if tokens.as_slice().is_empty() {
         return Ok(Ast::new());
     }
     let req = ParserRequest::new(tokens);
-    PrattEngine::new()
-        .parse(lang, &req)
-        .map_err(CheckError::from)
+    parser.parse(lang, &req).map_err(CheckError::from)
 }
 
 // ---------------------------------------------------------------------------
@@ -1643,8 +1646,17 @@ fn check_pass(
 /// # Errors
 ///
 /// Returns [`CheckError::Parse`] if any statement cannot be parsed.
-pub fn check_module(lang: &Language, src: &str) -> Result<TypecheckReport, CheckError> {
-    check_module_with_prelude(lang, src, &HashSet::new())
+pub fn check_module<L, P>(
+    lang: &Language,
+    src: &str,
+    lexer: &L,
+    parser: &P,
+) -> Result<TypecheckReport, CheckError>
+where
+    L: LexerEngine + ?Sized,
+    P: ParserEngine + ?Sized,
+{
+    check_module_with_prelude(lang, src, &HashSet::new(), lexer, parser)
 }
 
 /// Check a handl module source text against `lang` with a host-supplied
@@ -1667,16 +1679,22 @@ pub fn check_module(lang: &Language, src: &str) -> Result<TypecheckReport, Check
 /// # Errors
 ///
 /// Returns [`CheckError::Parse`] if any statement cannot be parsed.
-pub fn check_module_with_prelude(
+pub fn check_module_with_prelude<L, P>(
     lang: &Language,
     src: &str,
     prelude: &HashSet<String>,
-) -> Result<TypecheckReport, CheckError> {
+    lexer: &L,
+    parser: &P,
+) -> Result<TypecheckReport, CheckError>
+where
+    L: LexerEngine + ?Sized,
+    P: ParserEngine + ?Sized,
+{
     // Split into top-level statements and parse each.
     let chunks = split_statements(src);
     let mut stmts = Vec::with_capacity(chunks.len());
     for chunk in chunks {
-        let ast = parse_chunk(lang, &chunk.text)?;
+        let ast = parse_chunk(lang, &chunk.text, lexer, parser)?;
         if ast.is_empty() {
             continue;
         }
@@ -1720,7 +1738,13 @@ mod tests {
     fn debug_parse_cli() {
         let lang = handl_kit_data_prelude::language_from_yaml().expect("assemble");
         let src = "f :: (desc: String) ~> { description: desc }";
-        let ast = parse_chunk(&lang, src).expect("parse");
+        let ast = parse_chunk(
+            &lang,
+            src,
+            &hnl_engine_lex_pattern::DataLexerEngine,
+            &hnl_engine_parse_pratt::PrattEngine::new(),
+        )
+        .expect("parse");
         for i in 0..ast.len() {
             let node = ast.at(AstRef::new(i)).expect("node");
             eprintln!(

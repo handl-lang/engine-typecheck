@@ -6,7 +6,29 @@
 
 use handl_language::Language;
 use handl_plugin_ext_diag::Severity;
-use hnl_engine_typecheck::{CheckError, TypecheckReport, check_module, check_module_with_prelude};
+use hnl_engine_lex_pattern::DataLexerEngine;
+use hnl_engine_parse_pratt::PrattEngine;
+use hnl_engine_typecheck::{CheckError, TypecheckReport};
+
+/// The old two-argument shape, kept so the suite reads the same: the concrete
+/// engines are test-only dev-dependencies (the crate itself takes them injected).
+fn check_module(lang: &handl_language::Language, src: &str) -> Result<TypecheckReport, CheckError> {
+    hnl_engine_typecheck::check_module(lang, src, &DataLexerEngine, &PrattEngine::new())
+}
+
+fn check_module_with_prelude(
+    lang: &handl_language::Language,
+    src: &str,
+    prelude: &std::collections::HashSet<String>,
+) -> Result<TypecheckReport, CheckError> {
+    hnl_engine_typecheck::check_module_with_prelude(
+        lang,
+        src,
+        prelude,
+        &DataLexerEngine,
+        &PrattEngine::new(),
+    )
+}
 
 /// The canonical language for the bootstrap checker — supplied by the caller
 /// (the dev-dep on `handl-kit-data-prelude` is allowed to close the

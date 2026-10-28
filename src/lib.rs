@@ -221,8 +221,17 @@ impl From<LangError> for CheckError {
 /// # Errors
 ///
 /// Returns [`CheckError::Parse`] if the source cannot be parsed.
-pub fn check_module(lang: &Language, src: &str) -> Result<TypecheckReport, CheckError> {
-    bootstrap::check_module(lang, src)
+pub fn check_module<L, P>(
+    lang: &Language,
+    src: &str,
+    lexer: &L,
+    parser: &P,
+) -> Result<TypecheckReport, CheckError>
+where
+    L: hnl_engine_lex::LexerEngine + ?Sized,
+    P: hnl_engine_parse::ParserEngine + ?Sized,
+{
+    bootstrap::check_module(lang, src, lexer, parser)
 }
 
 /// Check a handl module source text with a host-supplied wire prelude.
@@ -238,17 +247,48 @@ pub fn check_module(lang: &Language, src: &str) -> Result<TypecheckReport, Check
 /// # Errors
 ///
 /// Returns [`CheckError::Parse`] if the source cannot be parsed.
-pub fn check_module_with_prelude(
+pub fn check_module_with_prelude<L, P>(
     lang: &Language,
     src: &str,
     prelude: &std::collections::HashSet<String>,
-) -> Result<TypecheckReport, CheckError> {
-    bootstrap::check_module_with_prelude(lang, src, prelude)
+    lexer: &L,
+    parser: &P,
+) -> Result<TypecheckReport, CheckError>
+where
+    L: hnl_engine_lex::LexerEngine + ?Sized,
+    P: hnl_engine_parse::ParserEngine + ?Sized,
+{
+    bootstrap::check_module_with_prelude(lang, src, prelude, lexer, parser)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Same shape as the public helper, for the prelude variant.
+    fn check_module_with_prelude(
+        lang: &Language,
+        src: &str,
+        prelude: &std::collections::HashSet<String>,
+    ) -> Result<TypecheckReport, CheckError> {
+        super::check_module_with_prelude(
+            lang,
+            src,
+            prelude,
+            &hnl_engine_lex_pattern::DataLexerEngine,
+            &hnl_engine_parse_pratt::PrattEngine::new(),
+        )
+    }
+
+    /// Concrete engines for the inline tests (dev-dependencies only).
+    fn check_module(lang: &Language, src: &str) -> Result<TypecheckReport, CheckError> {
+        super::check_module(
+            lang,
+            src,
+            &hnl_engine_lex_pattern::DataLexerEngine,
+            &hnl_engine_parse_pratt::PrattEngine::new(),
+        )
+    }
     use handl_language::{Ast, AstNode};
     use serde_json::json;
 
