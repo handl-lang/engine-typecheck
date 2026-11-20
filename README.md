@@ -1,14 +1,18 @@
 # engine-typecheck
 
-`hnl-engine-typecheck` — The **abstraction** crate for the typecheck operation (ADR-0054 §3).
+`hnl-engine-typecheck` — the abstraction crate for the typecheck operation.
+
+An `engine-*` crate: the trait/type surface for typechecking that concrete
+engines (`engine-typecheck-nbe`) implement.
 
 ## Development
 
 ```bash
-cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+cargo xtask gate        # fmt --check → clippy -D warnings → test → doc
 ```
 
-`ci.sh` is the gate (fmt → clippy → test → doc). Deps resolve from git, so no
+`cargo xtask` wraps the repo's `xtask/` crate (`fmt`, `clippy`, `test`, `doc`,
+`check`, `gate`); `ci.sh` is the gate entry. Deps resolve from git, so no
 sibling checkouts are needed; a plain clone test-runs as-is.
 
 ## License
@@ -17,10 +21,4 @@ MIT.
 
 ## Documentation
 
-Published site (Diátaxis): <https://handl-lang.github.io/docs/engine-typecheck/>
-
-- [Reference](https://handl-lang.github.io/docs/engine-typecheck/reference/) — public API surface
-- [How-to](https://handl-lang.github.io/docs/engine-typecheck/how-to/) — task recipes
-- [Explanation](https://handl-lang.github.io/docs/engine-typecheck/explanation/) — design and rationale
-
-Decision records live on the `project` branch under `project/adrs/`.
+<https://handl-lang.github.io/docs/engine-typecheck/>
