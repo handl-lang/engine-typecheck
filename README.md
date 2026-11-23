@@ -1,9 +1,9 @@
-# engine-typecheck
+# tool-typecheck
 
-`hnl-engine-typecheck` — the abstraction crate for the typecheck operation.
+`hnl-tool-typecheck` — the abstraction crate for the typecheck operation.
 
 An `engine-*` crate: the trait/type surface for typechecking that concrete
-engines (`engine-typecheck-nbe`) implement.
+engines (`tool-typecheck-nbe`) implement.
 
 ## Development
 
@@ -21,4 +21,4 @@ MIT.
 
 ## Documentation
 
-<https://handl-lang.github.io/docs/engine-typecheck/>
+<https://handl-lang.github.io/docs/tool-typecheck/>

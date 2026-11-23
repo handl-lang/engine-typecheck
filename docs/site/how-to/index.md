@@ -8,7 +8,7 @@ repos it patches.
 Call `check_module(&ast, &lang, options)`; the report's diagnostics carry spans, which is how `hnl typecheck` renders `file:line:col`.
 
 ```
-let report = hnl_engine_typecheck::check_module(&ast, &lang, options);
+let report = hnl_tool_typecheck::check_module(&ast, &lang, options);
 if !report.is_clean() {
     for d in &report.diagnostics { eprintln!("{d}"); }
 }

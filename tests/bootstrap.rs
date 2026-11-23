@@ -6,14 +6,14 @@
 
 use handl_language::Language;
 use handl_plugin_ext_diag::Severity;
-use hnl_engine_lex_pattern::DataLexerEngine;
-use hnl_engine_parse_pratt::PrattEngine;
-use hnl_engine_typecheck::{CheckError, TypecheckReport};
+use hnl_tool_lex_pattern::DataLexerEngine;
+use hnl_tool_parse_pratt::PrattEngine;
+use hnl_tool_typecheck::{CheckError, TypecheckReport};
 
 /// The old two-argument shape, kept so the suite reads the same: the concrete
 /// engines are test-only dev-dependencies (the crate itself takes them injected).
 fn check_module(lang: &handl_language::Language, src: &str) -> Result<TypecheckReport, CheckError> {
-    hnl_engine_typecheck::check_module(lang, src, &DataLexerEngine, &PrattEngine::new())
+    hnl_tool_typecheck::check_module(lang, src, &DataLexerEngine, &PrattEngine::new())
 }
 
 fn check_module_with_prelude(
@@ -21,7 +21,7 @@ fn check_module_with_prelude(
     src: &str,
     prelude: &std::collections::HashSet<String>,
 ) -> Result<TypecheckReport, CheckError> {
-    hnl_engine_typecheck::check_module_with_prelude(
+    hnl_tool_typecheck::check_module_with_prelude(
         lang,
         src,
         prelude,

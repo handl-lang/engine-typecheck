@@ -14,7 +14,7 @@
 
 | crate | role |
 |---|---|
-| `hnl-engine-typecheck` | abstraction + bootstrap checker |
+| `hnl-tool-typecheck` | abstraction + bootstrap checker |
 
 ## Build and test
 

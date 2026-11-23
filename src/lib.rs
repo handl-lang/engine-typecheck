@@ -1,4 +1,4 @@
-//! # hnl-engine-typecheck
+//! # hnl-tool-typecheck
 //!
 //! The **abstraction** crate for the typecheck operation (ADR-0054 §3).
 //!
@@ -10,7 +10,7 @@
 //! rules may call host functions).
 //! **No typecheck engine code lives here except the bootstrap checker** — the
 //! abstraction is the contract. The concrete engine is
-//! `hnl-engine-typecheck-nbe` (registered by the canonical kit under the
+//! `hnl-tool-typecheck-nbe` (registered by the canonical kit under the
 //! name `"nbe"`); this crate's own Rust [`check_module`] bootstrap scope
 //! checker backs the `hnl lint` `unbound-wire`/`unbound-export` rules.
 //! Engines are selected via `runtime.typecheck` in the kit data.
@@ -228,8 +228,8 @@ pub fn check_module<L, P>(
     parser: &P,
 ) -> Result<TypecheckReport, CheckError>
 where
-    L: hnl_engine_lex::LexerEngine + ?Sized,
-    P: hnl_engine_parse::ParserEngine + ?Sized,
+    L: hnl_tool_lex::LexerEngine + ?Sized,
+    P: hnl_tool_parse::ParserEngine + ?Sized,
 {
     bootstrap::check_module(lang, src, lexer, parser)
 }
@@ -255,8 +255,8 @@ pub fn check_module_with_prelude<L, P>(
     parser: &P,
 ) -> Result<TypecheckReport, CheckError>
 where
-    L: hnl_engine_lex::LexerEngine + ?Sized,
-    P: hnl_engine_parse::ParserEngine + ?Sized,
+    L: hnl_tool_lex::LexerEngine + ?Sized,
+    P: hnl_tool_parse::ParserEngine + ?Sized,
 {
     bootstrap::check_module_with_prelude(lang, src, prelude, lexer, parser)
 }
@@ -275,8 +275,8 @@ mod tests {
             lang,
             src,
             prelude,
-            &hnl_engine_lex_pattern::DataLexerEngine,
-            &hnl_engine_parse_pratt::PrattEngine::new(),
+            &hnl_tool_lex_pattern::DataLexerEngine,
+            &hnl_tool_parse_pratt::PrattEngine::new(),
         )
     }
 
@@ -285,8 +285,8 @@ mod tests {
         super::check_module(
             lang,
             src,
-            &hnl_engine_lex_pattern::DataLexerEngine,
-            &hnl_engine_parse_pratt::PrattEngine::new(),
+            &hnl_tool_lex_pattern::DataLexerEngine,
+            &hnl_tool_parse_pratt::PrattEngine::new(),
         )
     }
     use handl_language::{Ast, AstNode};

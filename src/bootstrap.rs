@@ -21,8 +21,8 @@
 
 use handl_language::{Ast, AstNode, AstRef, Language};
 use handl_plugin_ext_diag::{Diagnostic, Severity, Span, split_statements};
-use hnl_engine_lex::{LexerEngine, LexerRequest};
-use hnl_engine_parse::{ParserEngine, ParserRequest};
+use hnl_tool_lex::{LexerEngine, LexerRequest};
+use hnl_tool_parse::{ParserEngine, ParserRequest};
 use serde_json::Value;
 
 use std::collections::{HashMap, HashSet};
@@ -1196,7 +1196,7 @@ fn check_expr(
             // context: `export x := e` parses as
             // `export(assign(x, e))`. The wrapped binding enters the
             // sibling scope like a plain `x := e` (the runtime's
-            // `export` op env-assigns the name, engine-exec 05d9bba),
+            // `export` op env-assigns the name, exec 05d9bba),
             // so its name is in scope for the rest of the block. A bare
             // `export x` (re-export) keeps the top-level contract: the
             // name must already be bound. Signature exports
@@ -1741,8 +1741,8 @@ mod tests {
         let ast = parse_chunk(
             &lang,
             src,
-            &hnl_engine_lex_pattern::DataLexerEngine,
-            &hnl_engine_parse_pratt::PrattEngine::new(),
+            &hnl_tool_lex_pattern::DataLexerEngine,
+            &hnl_tool_parse_pratt::PrattEngine::new(),
         )
         .expect("parse");
         for i in 0..ast.len() {
