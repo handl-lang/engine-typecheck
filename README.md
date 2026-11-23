@@ -2,7 +2,7 @@
 
 `hnl-tool-typecheck` — the abstraction crate for the typecheck operation.
 
-An `engine-*` crate: the trait/type surface for typechecking that concrete
+A `tool-*` crate: the trait/type surface for typechecking that concrete
 engines (`tool-typecheck-nbe`) implement.
 
 ## Development
