@@ -68,7 +68,7 @@ fn assert_clean(report: &TypecheckReport) {
 
 #[test]
 fn duplicate_binding_semicolon() {
-    let report = check_module(lang(), "a = 1; a = 2").unwrap();
+    let report = check_module(lang(), "a := 1; a := 2").unwrap();
     assert!(
         has_diag(&report, "duplicate-binding", Severity::Error),
         "expected duplicate-binding error, got: {:?}",
@@ -78,7 +78,7 @@ fn duplicate_binding_semicolon() {
 
 #[test]
 fn duplicate_binding_newline() {
-    let report = check_module(lang(), "a = 1\na = 2").unwrap();
+    let report = check_module(lang(), "a := 1\na := 2").unwrap();
     assert!(
         has_diag(&report, "duplicate-binding", Severity::Error),
         "expected duplicate-binding error, got: {:?}",
@@ -88,7 +88,7 @@ fn duplicate_binding_newline() {
 
 #[test]
 fn duplicate_binding_span_points_at_name() {
-    let report = check_module(lang(), "a = 1; a = 2").unwrap();
+    let report = check_module(lang(), "a := 1; a := 2").unwrap();
     let dup = report
         .diagnostics
         .iter()
@@ -116,7 +116,7 @@ fn unbound_export() {
 #[test]
 fn bound_export_is_clean() {
     let report =
-        check_module(lang(), "sorter = x ~> x; export sorter from \"collection\"").unwrap();
+        check_module(lang(), "sorter := x ~> x; export sorter from \"collection\"").unwrap();
     assert!(
         !has_diag(&report, "unbound-export", Severity::Error),
         "should not have unbound-export when name is bound, got: {:?}",
@@ -130,7 +130,7 @@ fn bound_export_is_clean() {
 
 #[test]
 fn unused_import() {
-    let report = check_module(lang(), "import id from \"data/atoms\"; main = 1").unwrap();
+    let report = check_module(lang(), "import id from \"data/atoms\"; main := 1").unwrap();
     assert!(
         has_diag(&report, "unused-import", Severity::Warning),
         "expected unused-import warning, got: {:?}",
@@ -140,7 +140,7 @@ fn unused_import() {
 
 #[test]
 fn unused_import_span_points_at_name() {
-    let report = check_module(lang(), "import id from \"data/atoms\"; main = 1").unwrap();
+    let report = check_module(lang(), "import id from \"data/atoms\"; main := 1").unwrap();
     let imp = report
         .diagnostics
         .iter()
@@ -157,7 +157,7 @@ fn unused_import_span_points_at_name() {
 
 #[test]
 fn unbound_wire() {
-    let report = check_module(lang(), "main = foo").unwrap();
+    let report = check_module(lang(), "main := foo").unwrap();
     assert!(
         has_diag(&report, "unbound-wire", Severity::Error),
         "expected unbound-wire error, got: {:?}",
@@ -167,7 +167,7 @@ fn unbound_wire() {
 
 #[test]
 fn unbound_wire_span_points_at_name() {
-    let report = check_module(lang(), "main = foo").unwrap();
+    let report = check_module(lang(), "main := foo").unwrap();
     let wire = report
         .diagnostics
         .iter()
@@ -180,7 +180,7 @@ fn unbound_wire_span_points_at_name() {
 
 #[test]
 fn bound_wire_from_binding_is_clean() {
-    let report = check_module(lang(), "double = x ~> x * 2; main = double(3)").unwrap();
+    let report = check_module(lang(), "double := x ~> x * 2; main := double(3)").unwrap();
     assert_clean(&report);
 }
 
@@ -190,7 +190,7 @@ fn bound_wire_from_binding_is_clean() {
 
 #[test]
 fn clean_module() {
-    let report = check_module(lang(), "double = x ~> x * 2").unwrap();
+    let report = check_module(lang(), "double := x ~> x * 2").unwrap();
     assert_clean(&report);
 }
 
@@ -198,7 +198,7 @@ fn clean_module() {
 fn clean_module_with_import_and_call() {
     let report = check_module(
         lang(),
-        "import sorter from \"collection\"; main = sorter([3, 1, 2])",
+        "import sorter from \"collection\"; main := sorter([3, 1, 2])",
     )
     .unwrap();
     assert_clean(&report);
@@ -206,7 +206,7 @@ fn clean_module_with_import_and_call() {
 
 #[test]
 fn all_imports_used() {
-    let src = "import sorter from \"collection\"; import map from \"transform/map\"; main = sorter(map([3, 1, 2]))";
+    let src = "import sorter from \"collection\"; import map from \"transform/map\"; main := sorter(map([3, 1, 2]))";
     let report = check_module(lang(), src).unwrap();
     assert!(
         !has_diag(&report, "unused-import", Severity::Warning),
@@ -223,7 +223,7 @@ fn all_imports_used() {
 fn rec_not_yet_checked() {
     // `rec` fixpoint typing is deferred (ADR-0088). Using `rec` should emit
     // an Info `not-yet-checked` diagnostic rather than silently passing.
-    let src = "foo = rec { x = 1 } ( x )";
+    let src = "foo := rec { x := 1 } ( x )";
     let result = check_module(lang(), src);
     // If the rec syntax doesn't parse in the current grammar, skip the
     // assertion (the task allows skipping when rec is not testable).
@@ -245,7 +245,7 @@ fn rec_not_yet_checked() {
 #[test]
 fn error_recovery_reports_all() {
     // Two unbound wires + one unused import — all should be reported.
-    let src = "import id from \"data/atoms\"; main = foo; bar = baz";
+    let src = "import id from \"data/atoms\"; main := foo; bar := baz";
     let report = check_module(lang(), src).unwrap();
     let unbound_count = report
         .diagnostics
@@ -267,7 +267,7 @@ fn error_recovery_reports_all() {
 
 #[test]
 fn error_recovery_duplicate_and_unbound() {
-    let src = "a = 1; a = 2; main = foo";
+    let src = "a := 1; a := 2; main := foo";
     let report = check_module(lang(), src).unwrap();
     assert!(
         has_diag(&report, "duplicate-binding", Severity::Error),
@@ -329,7 +329,7 @@ fn parse_error_message_is_nonempty() {
 
 #[test]
 fn check_module_returns_report() {
-    let report = check_module(lang(), "x = 1").unwrap();
+    let report = check_module(lang(), "x := 1").unwrap();
     // The report should have a diagnostics vector (possibly empty).
     let _ = &report.diagnostics;
 }
@@ -365,7 +365,7 @@ fn check_error_equality() {
 
 #[test]
 fn duplicate_binding_is_error_not_warning() {
-    let report = check_module(lang(), "a = 1; a = 2").unwrap();
+    let report = check_module(lang(), "a := 1; a := 2").unwrap();
     let dup = report
         .diagnostics
         .iter()
@@ -376,7 +376,7 @@ fn duplicate_binding_is_error_not_warning() {
 
 #[test]
 fn unused_import_is_warning_not_error() {
-    let report = check_module(lang(), "import id from \"data/atoms\"; main = 1").unwrap();
+    let report = check_module(lang(), "import id from \"data/atoms\"; main := 1").unwrap();
     let imp = report
         .diagnostics
         .iter()
@@ -387,7 +387,7 @@ fn unused_import_is_warning_not_error() {
 
 #[test]
 fn unbound_wire_is_error() {
-    let report = check_module(lang(), "main = foo").unwrap();
+    let report = check_module(lang(), "main := foo").unwrap();
     let wire = report
         .diagnostics
         .iter()
@@ -403,14 +403,14 @@ fn unbound_wire_is_error() {
 #[test]
 fn function_param_does_not_trigger_unbound_wire() {
     // `x` is a function param, not an unbound wire.
-    let report = check_module(lang(), "double = x ~> x * 2").unwrap();
+    let report = check_module(lang(), "double := x ~> x * 2").unwrap();
     assert_clean(&report);
 }
 
 #[test]
 fn function_body_unbound_wire_detected() {
     // `y` is not a param and not in scope → unbound wire.
-    let report = check_module(lang(), "double = x ~> y * 2").unwrap();
+    let report = check_module(lang(), "double := x ~> y * 2").unwrap();
     assert!(
         has_diag(&report, "unbound-wire", Severity::Error),
         "expected unbound-wire for y, got: {:?}",
@@ -425,21 +425,21 @@ fn function_body_unbound_wire_detected() {
 #[test]
 fn object_literal_keys_not_unbound_wires() {
     // `x` and `y` are field names, not references — no unbound-wire errors.
-    let report = check_module(lang(), "r = { x: 1, y: 2 }").unwrap();
+    let report = check_module(lang(), "r := { x: 1, y: 2 }").unwrap();
     assert_clean(&report);
 }
 
 #[test]
 fn field_access_target_checked() {
     // `r` is a binding (in scope); `x` is a field name (not a reference).
-    let report = check_module(lang(), "r = { x: 1 }; p = r.x").unwrap();
+    let report = check_module(lang(), "r := { x: 1 }; p := r.x").unwrap();
     assert_clean(&report);
 }
 
 #[test]
 fn field_access_unbound_target_detected() {
     // `q` is not in scope → unbound wire. `x` is a field name (not flagged).
-    let report = check_module(lang(), "p = q.x").unwrap();
+    let report = check_module(lang(), "p := q.x").unwrap();
     assert!(
         has_diag(&report, "unbound-wire", Severity::Error),
         "expected unbound-wire for q, got: {:?}",
@@ -460,7 +460,7 @@ fn field_access_unbound_target_detected() {
 #[test]
 fn object_value_unbound_wire_detected() {
     // `foo` in the value position is an unbound wire; `x` (key) is not.
-    let report = check_module(lang(), "r = { x: foo }").unwrap();
+    let report = check_module(lang(), "r := { x: foo }").unwrap();
     assert!(
         has_diag(&report, "unbound-wire", Severity::Error),
         "expected unbound-wire for foo, got: {:?}",
@@ -487,7 +487,7 @@ fn object_value_unbound_wire_detected() {
 fn from_import_star_as_scopes_alias() {
     let report = check_module(
         lang(),
-        "from \"str\" import * as str; main = str.trim(\"x\")",
+        "from \"str\" import * as str; main := str.trim(\"x\")",
     )
     .unwrap();
     assert_clean(&report);
@@ -498,7 +498,7 @@ fn from_import_star_as_scopes_alias() {
 fn from_import_named_scopes_name() {
     let report = check_module(
         lang(),
-        "from \"str\" import reverse; main = reverse(\"ab\")",
+        "from \"str\" import reverse; main := reverse(\"ab\")",
     )
     .unwrap();
     assert_clean(&report);
@@ -509,7 +509,7 @@ fn from_import_named_scopes_name() {
 fn from_import_named_as_scopes_alias_not_name() {
     let report = check_module(
         lang(),
-        "from \"str\" import reverse as rev; main = rev(\"ab\")",
+        "from \"str\" import reverse as rev; main := rev(\"ab\")",
     )
     .unwrap();
     assert_clean(&report);
@@ -517,7 +517,7 @@ fn from_import_named_as_scopes_alias_not_name() {
     // The remote name itself is not bound.
     let report = check_module(
         lang(),
-        "from \"str\" import reverse as rev; main = reverse(\"ab\")",
+        "from \"str\" import reverse as rev; main := reverse(\"ab\")",
     )
     .unwrap();
     assert!(
@@ -532,7 +532,7 @@ fn from_import_named_as_scopes_alias_not_name() {
 /// chain at runtime, so `str` is in scope.
 #[test]
 fn from_import_star_bare_name_scopes_module_name() {
-    let report = check_module(lang(), "from \"str\" import *; main = str.trim(\"x\")").unwrap();
+    let report = check_module(lang(), "from \"str\" import *; main := str.trim(\"x\")").unwrap();
     assert_clean(&report);
 }
 
@@ -550,7 +550,7 @@ fn block_level_import_scopes_siblings() {
 /// referring to an earlier block binding is not an unbound wire.
 #[test]
 fn block_assign_binds_for_siblings() {
-    let report = check_module(lang(), "do { x :: 1\nx + 1 }").unwrap();
+    let report = check_module(lang(), "do { x := 1\nx + 1 }").unwrap();
     assert_clean(&report);
 }
 

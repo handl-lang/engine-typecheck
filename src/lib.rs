@@ -392,7 +392,7 @@ mod tests {
 
     #[test]
     fn check_module_simple_binding_is_clean() {
-        let report = check_module(canonical_lang(), "double = x ~> x * 2").unwrap();
+        let report = check_module(canonical_lang(), "double := x ~> x * 2").unwrap();
         assert!(
             report.is_clean(),
             "expected clean, got: {:?}",
@@ -402,7 +402,7 @@ mod tests {
 
     #[test]
     fn check_module_unbound_wire_errors() {
-        let report = check_module(canonical_lang(), "main = foo").unwrap();
+        let report = check_module(canonical_lang(), "main := foo").unwrap();
         assert!(
             report.diagnostics.iter().any(|d| d.rule == "unbound-wire"
                 && d.severity == handl_plugin_ext_diag::Severity::Error),
@@ -415,7 +415,7 @@ mod tests {
     fn check_module_with_prelude_seeds_scope() {
         // A bare host wire (e.g. a module-chain name) fires `unbound-wire`
         // without a prelude and is in scope once the host supplies it.
-        let bare = check_module(canonical_lang(), "main = somemod.trim(input) ~> input").unwrap();
+        let bare = check_module(canonical_lang(), "main := somemod.trim(input) ~> input").unwrap();
         assert!(
             bare.diagnostics.iter().any(|d| d.rule == "unbound-wire"),
             "expected unbound-wire without prelude, got: {:?}",
@@ -427,7 +427,7 @@ mod tests {
                 .collect();
         let seeded = check_module_with_prelude(
             canonical_lang(),
-            "main = somemod.trim(input) ~> input",
+            "main := somemod.trim(input) ~> input",
             &prelude,
         )
         .unwrap();

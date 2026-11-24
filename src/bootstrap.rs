@@ -1767,7 +1767,7 @@ mod tests {
     #[test]
     fn debug_parse_cli() {
         let lang = handl_kit_data_prelude::language_from_yaml().expect("assemble");
-        let src = "f :: (desc: String) ~> { description: desc }";
+        let src = "f := (desc: String) ~> { description: desc }";
         let ast = parse_chunk(
             &lang,
             src,
