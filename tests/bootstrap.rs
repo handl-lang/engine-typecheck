@@ -115,8 +115,11 @@ fn unbound_export() {
 
 #[test]
 fn bound_export_is_clean() {
-    let report =
-        check_module(lang(), "sorter := x ~> x; export sorter from \"collection\"").unwrap();
+    let report = check_module(
+        lang(),
+        "sorter := x ~> x; export sorter from \"collection\"",
+    )
+    .unwrap();
     assert!(
         !has_diag(&report, "unbound-export", Severity::Error),
         "should not have unbound-export when name is bound, got: {:?}",
