@@ -1376,6 +1376,36 @@ fn check_expr(
         return;
     }
 
+    // Test-declaration shapes (`test`/`property`/`bench`/
+    // `integration_test` from the ADR-0089 test-language fragment): a kind
+    // declaring both `name` and `body` roles is a test declaration — the
+    // same pair `hnl_tool_test::test_decl_roles` uses to recognize them.
+    // The `name` child is a declaration label, not a wire reference; the
+    // `body` and any other children check normally.
+    if let (Ok(Some(name_idx)), Ok(Some(_))) = (
+        lang.child_role_index(&node.kind, "name"),
+        lang.child_role_index(&node.kind, "body"),
+    ) {
+        let children = children_of(node);
+        for (pos, &child_raw) in children.iter().enumerate() {
+            if pos == name_idx {
+                continue;
+            }
+            check_expr(
+                lang,
+                src,
+                ast,
+                AstRef::new(child_raw),
+                scope,
+                stmt,
+                diags,
+                references,
+                pattern,
+            );
+        }
+        return;
+    }
+
     // Generic recursion: walk all children by positional `children` array.
     // (Roles are used above for named slots; the remaining children are
     // walked positionally per ADR-0081's fallback for shapes without roles.)
